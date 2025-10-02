@@ -65,13 +65,59 @@ const useSpeechRecognition = () => {
       return;
     }
     
+    // Don't start if already listening
+    if (isListening) return;
+    
     try {
+      // Ensure any previous recognition is stopped
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+      
+      // Reset the recognition instance to prevent 'already started' errors
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      recognitionRef.current = new SpeechRecognition();
+      
+      // Re-apply settings
+      recognitionRef.current.continuous = true;
+      recognitionRef.current.interimResults = true;
+      recognitionRef.current.lang = 'en-US';
+      
+      // Re-attach event handlers
+      recognitionRef.current.onresult = (event) => {
+        let finalTranscript = '';
+        let interimTranscript = '';
+
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          const result = event.results[i];
+          const text = result[0].transcript;
+          
+          if (result.isFinal) {
+            finalTranscript += text;
+          } else {
+            interimTranscript += text;
+          }
+        }
+        
+        if (finalTranscript) {
+          setTranscript(prev => prev + finalTranscript + ' ');
+        }
+      };
+      
+      recognitionRef.current.onerror = (event) => {
+        console.error('Speech recognition error', event.error);
+        setError(`Speech recognition error: ${event.error}`);
+        setIsListening(false);
+      };
+      
+      // Start listening
       recognitionRef.current.start();
       setIsListening(true);
       setError(null);
     } catch (err) {
       console.error('Error starting speech recognition:', err);
       setError('Error starting speech recognition. Please try again.');
+      setIsListening(false);
     }
   };
 

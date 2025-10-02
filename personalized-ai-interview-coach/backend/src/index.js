@@ -5,7 +5,7 @@ const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
 const pdf = require('pdf-parse');
-const { HfInference } = require('@huggingface/inference');
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 const connectDB = require('./db');
 const InterviewSession = require('./models/InterviewSession');
 
@@ -28,7 +28,9 @@ const upload = multer({
 // --- Initialization ---
 const app = express();
 const port = process.env.PORT || 5000;
-const hf = new HfInference(process.env.HF_TOKEN);
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+
 
 // Connect to MongoDB
 connectDB();
@@ -71,24 +73,17 @@ app.post('/api/generate-question', async (req, res) => {
   }
 
   try {
-    // 1. Switched to the chatCompletion function
-    const aiResponse = await hf.chatCompletion({
-      model: 'mistralai/Mistral-7B-Instruct-v0.2',
-      // 2. Input is now formatted as a "messages" array
-      messages: [{ role: 'user', content: `Generate one single, concise interview question about ${topic}. Do not add any preamble or explanation.` }],
-      parameters: {
-        max_new_tokens: 50,
-        temperature: 0.7,
-      }
-    });
+    // Create the prompt for the model
+    const prompt = `Generate one single, concise interview question about ${topic}. Do not add any preamble or explanation.`;
+    
+    // Generate content using Google's Generative AI
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const generatedText = await response.text();
 
-    // 3. The response is now located in a different place
-    const generatedText = aiResponse.choices[0].message.content;
-
-    res.json({ question: generatedText.trim().replace(/^"|"$/g, '') });
-
+    res.json({ question: generatedText.trim().replace(/^"/g, '').replace(/"$/g, '') });
   } catch (error) {
-    console.error('Error calling Hugging Face API:', error);
+    console.error('Error calling Google Generative AI:', error);
     res.status(500).json({ error: 'Failed to generate question from AI.' });
   }
 });
@@ -118,16 +113,12 @@ app.post('/api/evaluate-answer', async (req, res) => {
       }
     `;
 
-    const response = await hf.chatCompletion({
-      model: 'mistralai/Mistral-7B-Instruct-v0.2',
-      messages: [{ role: 'user', content: evaluationPrompt }],
-    });
-
+    const result = await model.generateContent(evaluationPrompt);
+    const jsonString = (await result.response).text();
+    
     try {
-      // Extract the JSON string from the response
-      const jsonString = response.choices[0].message.content;
-      // Parse the JSON string to an object
-      const evaluation = JSON.parse(jsonString);
+      // Extract and parse the JSON response, handling potential markdown formatting
+      const evaluation = JSON.parse(jsonString.match(/\{[\s\S]*\}/)[0]);
       
       // Save the interview session to the database
       try {
@@ -180,24 +171,8 @@ The user gave this answer:
 Based on their answer, ask one single, concise, and relevant follow-up question to dig deeper into their response.
 Do not add any preamble, explanation, or quotation marks. Just provide the follow-up question itself.`;
 
-    const response = await hf.chatCompletion({
-      model: 'mistralai/Mistral-7B-Instruct-v0.2',
-      messages: [
-        { 
-          role: 'system', 
-          content: 'You are an expert interviewer. Generate a single, concise follow-up question based on the user\'s previous answer. Provide only the question, no additional text or formatting.'
-        },
-        { 
-          role: 'user', 
-          content: `Original question: ${originalQuestion}\n\nUser's answer: ${previousAnswer}`
-        }
-      ],
-      max_tokens: 100,
-      temperature: 0.7,
-    });
-
-    // Extract the AI's response
-    let followUpQuestion = response.choices[0].message.content.trim();
+    const result = await model.generateContent(followUpPrompt);
+    let followUpQuestion = (await result.response).text().trim();
     
     // Clean up the response
     followUpQuestion = followUpQuestion
@@ -242,32 +217,19 @@ ${resumeText}
 
 Example JSON output: ["Can you tell me more about your role in Project X?", "How did you use Python at Company Y to achieve Z?"]`;
 
-    const aiResponse = await hf.chatCompletion({
-      model: 'mistralai/Mistral-7B-Instruct-v0.2',
-      messages: [
-        { role: 'system', content: 'You are an expert career coach. Generate relevant interview questions based on the resume text.' },
-        { role: 'user', content: resumePrompt }
-      ],
-      parameters: { 
-        max_new_tokens: 400,
-        temperature: 0.7
-      }
-    });
-
-    const generatedText = aiResponse.choices[0].message.content;
-    // Try to parse the response as JSON, fallback to extracting questions from text
+    const result = await model.generateContent(resumePrompt);
+    const generatedText = (await result.response).text();
+    
+    // Parse the JSON array from the response
     let questions;
     try {
-      questions = JSON.parse(generatedText);
+      questions = JSON.parse(generatedText.match(/\[[\s\S]*\]/)[0]);
       if (!Array.isArray(questions)) {
         throw new Error('Response is not an array');
       }
-    } catch (e) {
-      // Fallback: Extract questions from plain text response
-      questions = generatedText
-        .split('\n')
-        .map(line => line.replace(/^\d+[.)]\s*/, '').trim())
-        .filter(line => line.endsWith('?'));
+    } catch (error) {
+      console.error('Error parsing AI response:', error);
+      throw new Error('Failed to parse questions from AI response');
     }
 
     res.json({ questions });

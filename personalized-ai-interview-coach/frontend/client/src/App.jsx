@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
 import QuestionGenerator from './components/QuestionGenerator';
 import SessionHistory from './components/SessionHistory';
 import ResumeUploader from './components/ResumeUploader';
 
 const App = () => {
+  const [isListening, setIsListening] = useState(false);
   return (
     <BrowserRouter>
       <div className="min-h-screen bg-gray-900 text-white">
@@ -47,10 +48,20 @@ const App = () => {
               element={
                 <div>
                   <h1 className="text-3xl font-bold text-center my-8 text-blue-400">Practice Interview Questions</h1>
-                  <QuestionGenerator />
+                  <QuestionGenerator isListening={isListening} />
                 </div>
               } 
-            />
+            >
+              <Route 
+                index 
+                element={
+                  <div>
+                    <h1 className="text-3xl font-bold text-center my-8 text-blue-400">Practice Interview Questions</h1>
+                    <QuestionGenerator isListening={isListening} />
+                  </div>
+                } 
+              />
+            </Route>
             <Route 
               path="/history" 
               element={<SessionHistory />} 

@@ -36,7 +36,7 @@ const ResumeUploader = () => {
 
     try {
       const response = await axios.post(
-        '${import.meta.env.VITE_API_URL}/api/generate-from-resume',
+        `${import.meta.env.VITE_API_URL}/api/generate-from-resume`,
         formData,
         {
           headers: {
@@ -58,18 +58,12 @@ const ResumeUploader = () => {
   };
 
   const handleQuestionClick = (question) => {
-    // Reset any existing state and navigate to home with the selected question
+    // Navigate to home with the selected question
     navigate('/', { 
       state: { 
-        question,
-        // Reset other states as needed
-        timerReset: true,
-        resetTranscript: true
+        initialQuestion: question
       } 
     });
-    
-    // Force a page reload to ensure the question is properly loaded
-    window.scrollTo(0, 0);
   };
 
   return (

@@ -10,7 +10,7 @@ const SessionHistory = () => {
   useEffect(() => {
     const fetchSessions = async () => {
       try {
-        const response = await axios.get('${import.meta.env.VITE_API_URL}/api/sessions');
+        const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/sessions`);
         setSessions(response.data);
       } catch (err) {
         console.error('Error fetching sessions:', err);

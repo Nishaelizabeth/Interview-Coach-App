@@ -1,12 +1,16 @@
 import { useState, useEffect, useContext } from 'react';
+import { useLocation } from 'react-router-dom';
 import axios from 'axios';
 import useSpeechRecognition from '../hooks/useSpeechRecognition';
 import useTimer from '../hooks/useTimer';
 // import { usePractice } from '../context/PracticeContext';
 
-const QuestionGenerator = () => {
+const QuestionGenerator = ({ isListening }) => {
+  const location = useLocation();
   // const { currentQuestion, updateQuestion } = usePractice();
-  const [generatedQuestion, setGeneratedQuestion] = useState('');
+  const [generatedQuestion, setGeneratedQuestion] = useState(
+    location.state?.initialQuestion || ''
+  );
   const [topic, setTopic] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -16,6 +20,74 @@ const QuestionGenerator = () => {
   const [isGeneratingFollowUp, setIsGeneratingFollowUp] = useState(false);
   const [duration, setDuration] = useState(120);
   const { time, isActive, startTimer, stopTimer, resetTimer, formattedTime } = useTimer(duration);
+  
+  // Get speech recognition functions
+  const { 
+    transcript, 
+    resetTranscript, 
+    startListening, 
+    stopListening, 
+    error: speechError 
+  } = useSpeechRecognition();
+
+  const handleEvaluateAnswer = async () => {
+    if (!transcript.trim()) return;
+    
+    setIsEvaluating(true);
+    setEvaluationError('');
+    
+    try {
+      const response = await axios.post(
+        `${import.meta.env.VITE_API_URL}/api/evaluate-answer`,
+        {
+          question: generatedQuestion,
+          answer: transcript.trim()
+        }
+      );
+      
+      setEvaluation(response.data);
+      if (isListening) {
+        stopListening();
+      }
+      stopTimer();
+    } catch (error) {
+      console.error('Error evaluating answer:', error);
+      setEvaluationError('Failed to evaluate answer. Please try again.');
+    } finally {
+      setIsEvaluating(false);
+    }
+  };
+
+  const handleGenerateFollowUp = async () => {
+    if (!transcript.trim()) return;
+    
+    setIsGeneratingFollowUp(true);
+    
+    try {
+      const response = await axios.post(
+        `${import.meta.env.VITE_API_URL}/api/generate-follow-up`,
+        {
+          originalQuestion: generatedQuestion,
+          previousAnswer: transcript.trim()
+        }
+      );
+      
+      // Set the new follow-up question
+      setGeneratedQuestion(response.data.followUpQuestion);
+      // Clear the previous answer and evaluation
+      resetTranscript();
+      setEvaluation(null);
+      // Reset the timer
+      resetTimer(duration);
+      // Start the timer for the new question
+      startTimer();
+    } catch (error) {
+      console.error('Error generating follow-up question:', error);
+      setError('Failed to generate follow-up question. Please try again.');
+    } finally {
+      setIsGeneratingFollowUp(false);
+    }
+  };
 
   const handleGenerateQuestion = async (e) => {
     e.preventDefault();
@@ -29,9 +101,10 @@ const QuestionGenerator = () => {
     setError('');
 
     try {
-      const response = await axios.post('${import.meta.env.VITE_API_URL}/api/generate-question', {
+      const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/generate-question`, {
         topic: topic.trim()
       });
+    
       
       const newQuestion = response.data.question;
       setGeneratedQuestion(newQuestion);
