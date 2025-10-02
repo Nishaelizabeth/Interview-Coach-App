@@ -62,29 +62,55 @@ const useSpeechRecognition = () => {
   const startListening = () => {
     if (!recognitionRef.current) {
       setError('Speech recognition not initialized');
-      return;
+      return false;
     }
     
     // Don't start if already listening
-    if (isListening) return;
+    if (isListening) return false;
     
     try {
+      // Reset any previous error
+      setError(null);
+      
       // Ensure any previous recognition is stopped
       if (recognitionRef.current) {
-        recognitionRef.current.stop();
+        try {
+          recognitionRef.current.stop();
+        } catch (e) {
+          // Ignore errors when stopping already stopped recognition
+        }
       }
       
       // Reset the recognition instance to prevent 'already started' errors
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       recognitionRef.current = new SpeechRecognition();
       
-      // Re-apply settings
+      // Configure recognition settings
       recognitionRef.current.continuous = true;
       recognitionRef.current.interimResults = true;
       recognitionRef.current.lang = 'en-US';
       
+      // Set a timeout for no-speech detection
+      let timeoutId;
+      const NO_SPEECH_TIMEOUT = 5000; // 5 seconds
+      
       // Re-attach event handlers
+      recognitionRef.current.onstart = () => {
+        // Set a timeout to detect no-speech
+        timeoutId = setTimeout(() => {
+          if (!transcript) { // If no speech was detected yet
+            setError('No speech detected. Please speak clearly.');
+            stopListening();
+          }
+        }, NO_SPEECH_TIMEOUT);
+      };
+      
       recognitionRef.current.onresult = (event) => {
+        // Clear the no-speech timeout when we get any result
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+        
         let finalTranscript = '';
         let interimTranscript = '';
 
@@ -106,14 +132,21 @@ const useSpeechRecognition = () => {
       
       recognitionRef.current.onerror = (event) => {
         console.error('Speech recognition error', event.error);
-        setError(`Speech recognition error: ${event.error}`);
+        // Don't show 'no-speech' error as it's handled by our timeout
+        if (event.error !== 'no-speech') {
+          setError(`Speech recognition error: ${event.error}`);
+        }
         setIsListening(false);
+        if (timeoutId) clearTimeout(timeoutId);
       };
+      
+      // Clear any previous transcript
+      setTranscript('');
       
       // Start listening
       recognitionRef.current.start();
       setIsListening(true);
-      setError(null);
+      return true;
     } catch (err) {
       console.error('Error starting speech recognition:', err);
       setError('Error starting speech recognition. Please try again.');

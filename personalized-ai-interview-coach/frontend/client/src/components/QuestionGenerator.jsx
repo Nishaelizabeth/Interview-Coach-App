@@ -5,7 +5,7 @@ import useSpeechRecognition from '../hooks/useSpeechRecognition';
 import useTimer from '../hooks/useTimer';
 // import { usePractice } from '../context/PracticeContext';
 
-const QuestionGenerator = ({ isListening }) => {
+const QuestionGenerator = ({ isListening: isListeningProp }) => {
   const location = useLocation();
   // const { currentQuestion, updateQuestion } = usePractice();
   const [generatedQuestion, setGeneratedQuestion] = useState(
@@ -23,12 +23,37 @@ const QuestionGenerator = ({ isListening }) => {
   
   // Get speech recognition functions
   const { 
+    isListening,
     transcript, 
     resetTranscript, 
     startListening, 
     stopListening, 
     error: speechError 
   } = useSpeechRecognition();
+  
+  // Handle stop listening with proper cleanup
+  const handleStopListening = () => {
+    stopListening();
+    stopTimer();
+  };
+  
+  // Toggle recording state
+  const toggleRecording = () => {
+    if (isListening) {
+      handleStopListening();
+    } else {
+      // Reset any previous transcript and errors
+      resetTranscript();
+      setError('');
+      
+      // Start listening and timer
+      const started = startListening();
+      if (started) {
+        resetTimer(duration);
+        startTimer();
+      }
+    }
+  };
 
   const handleEvaluateAnswer = async () => {
     if (!transcript.trim()) return;
@@ -206,30 +231,60 @@ const QuestionGenerator = ({ isListening }) => {
                 </div>
               </div>
 
-              <div className="flex justify-center gap-4">
-                <button
-                  type="button"
-                  onClick={isListening ? handleStopListening : startListening}
-                  disabled={time === 0 && !isListening}
-                  className={`px-6 py-3 rounded-md font-medium text-white transition-colors ${
-                    isListening 
-                      ? 'bg-red-600 hover:bg-red-700' 
-                      : time === 0
-                        ? 'bg-gray-600 cursor-not-allowed'
-                        : 'bg-blue-600 hover:bg-blue-700'
-                  }`}
-                >
-                  {isListening ? '⏹️ Stop Recording' : '🎤 Record Answer'}
-                </button>
-                
-                {transcript && (
+              <div className="flex flex-col items-center gap-4">
+                <div className="flex gap-4">
                   <button
                     type="button"
-                    onClick={resetTranscript}
-                    className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-md text-sm font-medium"
+                    onClick={toggleRecording}
+                    disabled={time === 0 && !isListening}
+                    className={`px-6 py-3 rounded-md font-medium text-white transition-all ${
+                      isListening 
+                        ? 'bg-red-600 hover:bg-red-700 animate-pulse' 
+                        : time === 0
+                          ? 'bg-gray-600 cursor-not-allowed'
+                          : 'bg-blue-600 hover:bg-blue-700 hover:scale-105'
+                    } flex items-center gap-2 min-w-[180px] justify-center`}
                   >
-                    Clear
+                    {isListening ? (
+                      <>
+                        <span className="relative flex h-3 w-3">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-3 w-3 bg-white"></span>
+                        </span>
+                        Stop Recording
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path>
+                        </svg>
+                        Record Answer
+                      </>
+                    )}
                   </button>
+                  
+                  {transcript && !isListening && (
+                    <button
+                      type="button"
+                      onClick={resetTranscript}
+                      className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-md text-sm font-medium flex items-center gap-1"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                      </svg>
+                      Clear
+                    </button>
+                  )}
+                </div>
+                
+                {isListening && (
+                  <div className="text-sm text-blue-400 flex items-center gap-1">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+                    </span>
+                    Listening... Speak now
+                  </div>
                 )}
               </div>
 
@@ -251,10 +306,28 @@ const QuestionGenerator = ({ isListening }) => {
                   )}
                 </div>
                 <div 
-                  className="w-full min-h-32 p-4 bg-gray-800 border border-gray-600 rounded-md text-white whitespace-pre-wrap overflow-y-auto"
-                  style={{ minHeight: '8rem', maxHeight: '300px' }}
+                  className="w-full min-h-32 p-4 bg-gray-800 border border-gray-600 rounded-md text-white whitespace-pre-wrap overflow-y-auto transition-all duration-200"
+                  style={{ 
+                    minHeight: '8rem', 
+                    maxHeight: '300px',
+                    borderColor: isListening ? '#3b82f6' : '#4b5563',
+                    boxShadow: isListening ? '0 0 0 1px #3b82f6' : 'none'
+                  }}
                 >
-                  {transcript || (isListening ? 'Speak now...' : 'Click the record button and start speaking. Your response will appear here.')}
+                  {transcript || (
+                    <div className="h-full flex items-center justify-center text-gray-400">
+                      {isListening 
+                        ? <span className="flex items-center gap-2">
+                            <span className="relative flex h-2 w-2">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+                            </span>
+                            Listening... Start speaking
+                          </span>
+                        : 'Click the record button and start speaking. Your response will appear here.'
+                      }
+                    </div>
+                  )}
                 </div>
               </div>
 
