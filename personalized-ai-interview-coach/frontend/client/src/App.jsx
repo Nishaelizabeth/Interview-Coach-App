@@ -25,12 +25,6 @@ const App = () => {
                   Practice
                 </Link>
                 <Link 
-                  to="/history" 
-                  className="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 transition-colors"
-                >
-                  History
-                </Link>
-                <Link 
                   to="/resume" 
                   className="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 transition-colors"
                 >
@@ -62,10 +56,6 @@ const App = () => {
                 } 
               />
             </Route>
-            <Route 
-              path="/history" 
-              element={<SessionHistory />} 
-            />
             <Route 
               path="/resume" 
               element={
